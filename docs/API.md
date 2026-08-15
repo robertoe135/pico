@@ -12,11 +12,24 @@ All endpoints except `GET /health` require an `X-Api-Key` header matching
 
 ## `GET /health`
 
-No auth required — meant to be pollable by uptime monitors.
+No auth required — meant to be pollable by uptime monitors, including
+externally if you put this server behind a public tunnel. Deliberately
+omits the Pico's LAN IP/RSSI when called unauthenticated, since this is
+the one endpoint expected to sit on an open public hostname.
 
 ```
 curl http://192.168.1.60:8090/health
 ```
+
+```json
+{
+  "status": "ok",
+  "uptimeS": 8123,
+  "wifi": "connected"
+}
+```
+
+With a valid `X-Api-Key`, the same endpoint also includes `ip`/`rssi`:
 
 ```json
 {

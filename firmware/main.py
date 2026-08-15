@@ -23,17 +23,21 @@ def _authorized(req):
 
 @app.route("GET", "/health")
 async def health(req):
-    # No auth — this is meant to be pollable by uptime monitors / the
-    # router's health check without needing the shared secret.
-    return json_response(
-        {
-            "status": "ok",
-            "uptimeS": time.time() - START_TIME,
-            "wifi": "connected" if wifi.is_connected() else "disconnected",
-            "ip": wifi.ip(),
-            "rssi": wifi.rssi(),
-        }
-    )
+    # No auth — this is meant to be pollable by uptime monitors without
+    # needing the shared secret. Deliberately excludes LAN IP / RSSI: this
+    # endpoint is the one thing meant to sit behind a public tunnel
+    # unauthenticated, so it shouldn't hand out internal network details
+    # to anyone who requests it. Authorized callers get that detail from
+    # GET /printers or their own network tooling instead.
+    body = {
+        "status": "ok",
+        "uptimeS": time.time() - START_TIME,
+        "wifi": "connected" if wifi.is_connected() else "disconnected",
+    }
+    if _authorized(req):
+        body["ip"] = wifi.ip()
+        body["rssi"] = wifi.rssi()
+    return json_response(body)
 
 
 @app.route("GET", "/printers")

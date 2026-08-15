@@ -91,6 +91,38 @@ recommendation:
   the open internet. The Pico itself doesn't need to run anything extra —
   it just needs to be reachable on the LAN from whatever box is running
   the tunnel.
+
+  If you already have `cloudflared` running for other services, this is
+  just one more ingress rule pointing at the Pico's LAN IP — no need for a
+  separate tunnel:
+
+  ```yaml
+  # ~/.cloudflared/config.yml
+  tunnel: <your-existing-tunnel-id>
+  credentials-file: /path/to/<tunnel-id>.json
+
+  ingress:
+    - hostname: print.yourdomain.com
+      service: http://192.168.1.60:8090   # the Pico's LAN IP
+    # ...your other existing ingress rules...
+    - service: http_status:404
+  ```
+
+  ```bash
+  cloudflared tunnel route dns <tunnel-name> print.yourdomain.com
+  # then restart/reload cloudflared
+  curl https://print.yourdomain.com/health
+  ```
+
+  The `X-Api-Key` header still applies on top of this — Cloudflare Tunnel
+  gets you TLS + no open inbound port, the API key is still what gates
+  `/printers` and `/printjobs`. For meaningfully stronger auth than a
+  shared secret (e.g. if this hostname might get scanned/guessed), put the
+  hostname behind [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/)
+  with a service token and have tda-app's Convex action send the
+  `CF-Access-Client-Id` / `CF-Access-Client-Secret` headers alongside
+  `X-Api-Key` — Access checks those before the request ever reaches the
+  tunnel, so a wrong/missing token never even hits the Pico.
 - **Router port-forward + dynamic DNS**, if a tunnel isn't an option.
   Forward some external port to the Pico's `:8090` on the LAN, and use a
   DDNS service if the office doesn't have a static IP. Do **not** do this
