@@ -10,14 +10,15 @@ media-size framing, and raster line encoding right from scratch, from
 memory, on a microcontroller is exactly the kind of hardware-protocol
 footgun worth avoiding when a proven library already exists.
 
-Output is raw bytes ready to base64-encode and POST to the Pico server's
-`/printjobs` endpoint with `contentType: "raw_base64"` — see
-tools/send_test_job.py for a ready-made sender, and docs/BROTHER_PROTOCOL.md
-for how this fits into the tda-app integration.
+Output is raw bytes, ready to hand to the Pico's poll/pull pipeline — see
+tools/mock_convex_server.py's `enqueue` command to queue this file as a
+test job without needing tda-app/Convex running yet, and
+docs/BROTHER_PROTOCOL.md for how this fits into the tda-app integration.
 
 Usage:
     pip install brother_ql pillow
     python3 tools/render_label.py label.png out.bin --label 62
+    python3 tools/mock_convex_server.py enqueue --file out.bin --printer ql810w
 
 `--label 62` selects 62mm continuous tape, matching the office's label
 stock (tda-app's generateSampleLabel.js renders a 2.4in / ~62mm square
