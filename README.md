@@ -80,29 +80,31 @@ docs/
    ```
 3. Point `config.py` at the real QL-810W and work through the
    [first physical test checklist](./docs/BROTHER_PROTOCOL.md#first-physical-test-checklist).
-4. Build the Convex side of the contract — see
-   [docs/TDA_APP_INTEGRATION.md](./docs/TDA_APP_INTEGRATION.md) for the
-   full plan (this repo doesn't include tda-app changes; only read access
-   to that repo was available here).
+4. The Convex side is implemented on the `claude/pico-print-server-integration`
+   branch of `tda-app` (not merged, no PR opened) — see
+   [docs/TDA_APP_INTEGRATION.md](./docs/TDA_APP_INTEGRATION.md) for exactly
+   what's there, what was verified (type-checked, built, unit-tested — no
+   live Convex deployment or physical printer was available to test
+   against directly), and what a human still needs to do (deploy, set env
+   vars, physically test).
 
 ## Status / what's not done yet
 
-- **The Convex side doesn't exist yet.** This repo implements and tests
-  the Pico's half of the contract (see
-  [docs/PROTOCOL.md](./docs/PROTOCOL.md)) and ships a mock server to
-  develop against, but the real `printJobs` table, HTTP actions, and
-  rasterization step described in
-  [docs/TDA_APP_INTEGRATION.md](./docs/TDA_APP_INTEGRATION.md) still need
-  to be built in `tda-app`.
-- **Rasterization is not implemented anywhere yet** — tda-app's label
-  output is currently vector PDF; something needs to render it to a
-  bitmap and encode it as Brother raster bytes before a job can be
-  queued. See TDA_APP_INTEGRATION.md §4.
+- **The Convex side is implemented but not deployed.** `tda-app`'s
+  `printJobs` table, HTTP actions, rasterization (client-side, via a
+  faithfully-ported and unit-tested Brother raster encoder), and UI
+  wiring in all 3 places the existing print action appears are all
+  written and type/build-verified — see
+  [docs/TDA_APP_INTEGRATION.md](./docs/TDA_APP_INTEGRATION.md) §7 for the
+  precise verified/not-verified line. Nothing has run against a real
+  Convex deployment or a real printer yet.
 - **Delivery is at-least-once, not exactly-once** — a lost completion
   report means a job can print twice rather than not at all. See
   [docs/PROTOCOL.md](./docs/PROTOCOL.md)'s note on the `complete`
-  endpoint, and the recommended stale-claim reclaim cron in
-  TDA_APP_INTEGRATION.md §2.
+  endpoint, and the stale-claim reclaim cron in TDA_APP_INTEGRATION.md §2.
 - **TLS server-certificate verification** on the Pico's outbound HTTPS
   client isn't confirmed hardened — see the note in
   [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md#5-reaching-the-printer-from-outside-the-office-lan).
+- **The label-size assumption in the rasterizer needs a physical test to
+  confirm** — see TDA_APP_INTEGRATION.md §4's note on the 2.4in design vs
+  the printer's fixed 696px/2.32in printable width.
