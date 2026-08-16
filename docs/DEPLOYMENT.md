@@ -123,12 +123,23 @@ proven out.
 ## Reliability notes
 
 - The board reconnects WiFi automatically if it drops (checked every
-  loop iteration in `main.py`).
+  loop iteration in `main.py`); `wifi.connect()`'s retry wait feeds the
+  watchdog itself, so a slow-to-reconnect AP doesn't get rebooted out
+  from under a reconnect attempt that's still in progress.
 - A hardware watchdog (`machine.WDT`, ~8s timeout) reboots the board if
   the event loop ever wedges — no one is going to be standing next to it
-  to power-cycle it. It's fed once per poll tick and, during an active
-  job, once per chunk streamed — see the comment in `main.py` for why
-  that matters for jobs that take longer than 8s end-to-end.
+  to power-cycle it. Every connect-phase timeout (WiFi, Convex, the
+  printer) is kept under that 8s ceiling on its own, since nothing can
+  feed the watchdog mid-connect; past that, `httpclient.py` feeds it
+  after headers and once per body chunk, so an individual job can safely
+  take much longer than 8s end-to-end. See the comment in `main.py`.
+- The printer connect timeout in particular is deliberately short
+  (`printjobs.py`, 6s) — a QL-810W that's off or unreachable is a
+  realistic failure mode, not just a theoretical one, and should report
+  a failed job quickly rather than risk outliving the watchdog.
+- `firmware/main.py` `print()`s on poll/job failures — invisible when
+  running headless, but useful if you plug in `mpremote` to see what a
+  device that "seems stuck" is actually doing.
 - Delivery is **at-least-once**, not exactly-once: if the Pico prints a
   job but its `POST .../complete` report doesn't land, Convex's
   recommended stale-claim reclaim cron (see

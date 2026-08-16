@@ -105,6 +105,27 @@ summary:
 
 - `GET /pico/pending-jobs` → calls `claimNextPendingJob`; `204` if null,
   else `200` with the small job-metadata JSON PROTOCOL.md describes.
+
+  **Free win worth taking here**: the Pico already calls this route every
+  `POLL_INTERVAL_S` (5s default) regardless of whether there's a job —
+  that's a heartbeat you already have for free. Have this route also
+  touch a `lastSeenAt: Date.now()` on a small `devices` (or even a
+  single-row) table as a side effect of every poll, no matter whether it
+  found a job. tda-app's UI can then show "print bridge: online / last
+  seen Ns ago" without any new endpoint, firmware change, or polling from
+  the client — it's a live Convex query away.
+
+- If you ever add a second printer or a second Pico, note that
+  `claimNextPendingJob` as described doesn't filter by which printer(s)
+  the polling device actually knows about (`firmware/config.py`'s
+  `PRINTERS`) — it just claims the oldest pending job, period. A single
+  Pico handling a printer it doesn't have configured would claim a job
+  it can't serve, fail immediately (`poller.py` raises on an unknown
+  `printerId`), and that job would report `error` rather than being left
+  for a Pico that could actually reach that printer. Not a problem at the
+  current one-Pico/one-printer scale, but if that changes, have the poll
+  request pass the device's known printer IDs (or a `deviceId` Convex can
+  map to a printer allowlist) so claiming can filter accordingly.
 - `GET /pico/jobs/:id/content` → looks up the job, streams
   `ctx.storage.get(job.contentStorageId)`'s bytes directly as the
   response body with `Content-Type: application/octet-stream`.

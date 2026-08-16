@@ -17,11 +17,15 @@ from status_led import StatusLed
 
 led = StatusLed()
 
-# Hardware watchdog ceiling on RP2040 is ~8.3s. Nothing feeds it during a
-# blocking connect/TLS-handshake phase, so httpclient.py's own connect
-# timeout is kept under this — see CONNECT_TIMEOUT_S there. Once a
-# transfer is underway, poller.py feeds the watchdog per chunk, so an
-# individual job can safely take much longer than 8s end-to-end.
+# Hardware watchdog ceiling on RP2040 is ~8.3s. Every blocking network
+# call in this app either finishes well under that on its own (connect
+# timeouts in httpclient.py/printjobs.py are deliberately kept under 8s,
+# since nothing can feed the watchdog mid-connect) or feeds the watchdog
+# from inside itself once past the connect phase (wifi.connect()'s retry
+# loop, httpclient's per-chunk streaming) — see the `feed` parameter
+# threaded through wifi.py, httpclient.py, and poller.py. That's what
+# lets an individual job safely take much longer than 8s end-to-end
+# without a false reboot.
 WDT_TIMEOUT_MS = 8000
 
 
@@ -34,6 +38,7 @@ def _poll_once(feed):
     try:
         poller.run_job(config.CONVEX_BASE_URL, config.API_KEY, job, config.PRINTERS, feed=feed)
     except Exception as e:
+        print("job", job.get("id"), "failed:", e)
         led.job_failed()
         try:
             poller.report_complete(
@@ -72,15 +77,17 @@ def main():
         if not wifi.is_connected():
             led.wifi_lost()
             try:
-                wifi.connect(config.WIFI_SSID, config.WIFI_PASSWORD)
+                wifi.connect(config.WIFI_SSID, config.WIFI_PASSWORD, feed=feed)
                 led.wifi_ready()
-            except Exception:
+            except Exception as e:
+                print("wifi reconnect failed:", e)
                 time.sleep(config.POLL_INTERVAL_S)
                 continue
 
         try:
             found_job = _poll_once(feed)
-        except Exception:
+        except Exception as e:
+            print("poll failed:", e)
             led.job_failed()
             found_job = False
 

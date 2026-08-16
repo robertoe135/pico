@@ -51,8 +51,12 @@ not base64.
 
 The Pico streams this response straight into a TCP write to the
 printer's socket as bytes arrive — it never buffers the whole job in RAM,
-so there's no practical size ceiling from the Pico's side (the QL-810W's
-own tape length is the real limit).
+so memory isn't a practical size limit from the Pico's side. It does
+enforce a generous 4MB sanity cap (`poller.py`'s `MAX_JOB_BYTES`, far
+beyond any real label) and abort with an error past that, as a guard
+against a runaway or misconfigured response driving the printer
+indefinitely rather than a real ceiling any legitimate job should ever
+approach.
 
 ## `POST /pico/jobs/{id}/complete`
 

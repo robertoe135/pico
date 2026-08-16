@@ -4,7 +4,12 @@
 
 import socket
 
-CONNECT_TIMEOUT_S = 10
+# Kept under the ~8s hardware watchdog ceiling (main.py) — this is a
+# single blocking connect() call with nothing to feed the watchdog
+# mid-call, so it must resolve (success or failure) well inside that
+# window on its own. A printer that's off or unreachable is a realistic
+# case, not just a theoretical one, so this matters in practice.
+CONNECT_TIMEOUT_S = 6
 
 
 class PrinterConnection:

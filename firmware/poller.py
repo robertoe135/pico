@@ -15,6 +15,13 @@ class PollError(Exception):
     pass
 
 
+# A generous ceiling well beyond any real label (a 62mm-wide job at 300dpi
+# would need to be many meters long to get near this) — guards against a
+# runaway/misconfigured response driving the printer indefinitely and
+# burning through tape on a bug rather than failing loudly.
+MAX_JOB_BYTES = 4 * 1024 * 1024
+
+
 def _headers(api_key, extra=None):
     h = {"X-Api-Key": api_key}
     if extra:
@@ -24,10 +31,8 @@ def _headers(api_key, extra=None):
 
 def fetch_pending_job(base_url, api_key, feed=None):
     """Returns a job dict, or None if nothing is currently pending."""
-    if feed:
-        feed()
     status, _headers_out, body = httpclient.request(
-        "GET", base_url + "/pico/pending-jobs", headers=_headers(api_key)
+        "GET", base_url + "/pico/pending-jobs", headers=_headers(api_key), feed=feed
     )
     if status == 204:
         return None
@@ -50,26 +55,22 @@ def run_job(base_url, api_key, job, printers, feed=None):
 
     content_url = "%s/pico/jobs/%s/content" % (base_url, job["id"])
 
-    if feed:
-        feed()
+    total = [0]
 
     with PrinterConnection(printer["ip"], printer["port"]) as conn:
-        def _write_and_feed(chunk):
+        def _write(chunk):
+            total[0] += len(chunk)
+            if total[0] > MAX_JOB_BYTES:
+                raise PollError("job content exceeded %d byte cap" % MAX_JOB_BYTES)
             conn.write(chunk)
-            if feed:
-                feed()  # chunks arrive steadily during a transfer, which
-                # is what keeps the ~8s hardware watchdog fed through a
-                # job that takes longer than that to send end-to-end.
 
-        status = httpclient.get_stream(content_url, _headers(api_key), on_chunk=_write_and_feed)
+        status = httpclient.get_stream(content_url, _headers(api_key), on_chunk=_write, feed=feed)
 
     if status != 200:
         raise PollError("job content fetch returned HTTP %d" % status)
 
 
 def report_complete(base_url, api_key, job_id, state, error=None, feed=None):
-    if feed:
-        feed()
     payload = {"state": state}
     if error is not None:
         payload["error"] = str(error)[:500]
@@ -79,5 +80,6 @@ def report_complete(base_url, api_key, job_id, state, error=None, feed=None):
         "%s/pico/jobs/%s/complete" % (base_url, job_id),
         headers=_headers(api_key, {"Content-Type": "application/json"}),
         body=body,
+        feed=feed,
     )
     return status
