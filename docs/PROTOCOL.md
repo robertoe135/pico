@@ -17,10 +17,13 @@ secret configured on both sides (`API_KEY` in the Pico's `config.py`,
 
 ## `GET /pico/pending-jobs`
 
-Polled by the Pico every `POLL_INTERVAL_S` (default 5s). Must **atomically**
-claim the job it returns (flip it from `pending` to `claimed`
-server-side, in the same transaction as reading it) — if two poll
-responses can hand out the same job, it gets printed twice.
+Polled by the Pico every `POLL_ACTIVE_INTERVAL_S` (5s default), backing
+off to `POLL_IDLE_INTERVAL_S` (45s default) after `POLL_IDLE_AFTER_MISSES`
+consecutive empty polls — see TDA_APP_INTEGRATION.md's note on why a flat
+interval isn't free. Must **atomically** claim the job it returns (flip
+it from `pending` to `claimed` server-side, in the same transaction as
+reading it) — if two poll responses can hand out the same job, it gets
+printed twice.
 
 - Nothing pending → `204 No Content`, empty body.
 - A job is available → `200`:

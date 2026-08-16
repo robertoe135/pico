@@ -70,9 +70,12 @@ mpremote connect auto
 ```
 
 You should see the onboard LED fast-blink (connecting), settle briefly
-once WiFi connects, then blip once every `POLL_INTERVAL_S` seconds — that
-slow blip is the normal idle heartbeat, one per poll against
-`CONVEX_BASE_URL`.
+once WiFi connects, then blip once every `POLL_ACTIVE_INTERVAL_S`
+seconds — that slow blip is the normal heartbeat, one per poll against
+`CONVEX_BASE_URL`. After `POLL_IDLE_AFTER_MISSES` empty polls in a row
+(a few minutes of no activity), the gap between blips widens to
+`POLL_IDLE_INTERVAL_S` — that's the adaptive backoff described in
+[TDA_APP_INTEGRATION.md](./TDA_APP_INTEGRATION.md), not a fault.
 
 There's no inbound port to `curl` anymore (that's the point — see below),
 so to confirm it's actually reaching the network, point it at the mock

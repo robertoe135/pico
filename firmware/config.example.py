@@ -21,12 +21,25 @@ CONVEX_BASE_URL = "https://your-deployment.convex.site"
 #   python3 -c "import secrets; print(secrets.token_hex(24))"
 API_KEY = "change-me"
 
-# How often (seconds) to ask Convex whether a job is pending. A few
-# seconds of latency here doesn't matter for a label printer — nobody's
-# timing a print job to the second. Lower = more responsive, more
-# requests; the device polls again immediately (no wait) right after
-# handling a job, so a burst of jobs doesn't queue up behind this delay.
-POLL_INTERVAL_S = 5
+# Polling cadence. Every poll costs Convex function calls (an HTTP
+# action + the internal mutation it runs to atomically claim a job —
+# Convex requires that split, HTTP actions can't touch the database
+# directly), whether or not anything's actually pending. Polling flat-out
+# at POLL_ACTIVE_INTERVAL_S 24/7 adds up fast — see
+# docs/TDA_APP_INTEGRATION.md's note on this — so this backs off to
+# POLL_IDLE_INTERVAL_S once nothing's shown up for a while, and snaps
+# back to the fast interval the moment a job appears (or right after
+# handling one, in case another is queued right behind it).
+POLL_ACTIVE_INTERVAL_S = 5  # cadence right after activity — a few
+# seconds of latency doesn't matter for a label printer, but this is the
+# rate a burst of jobs gets drained at, so keep it reasonably brisk.
+POLL_IDLE_INTERVAL_S = 45  # cadence once idle — cuts function-call
+# volume by ~9x during idle stretches, which for an office label printer
+# is the overwhelming majority of the time.
+POLL_IDLE_AFTER_MISSES = 6  # consecutive empty polls at the active
+# interval (~30s by default) before backing off to the idle interval —
+# a short grace period so a second job queued moments after the first
+# still gets picked up fast.
 
 # Printers this device can send jobs to, keyed by the `printerId` a job
 # names. "ip" is the Brother QL-810W's LAN address — set a DHCP

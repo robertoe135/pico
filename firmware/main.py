@@ -70,6 +70,7 @@ def main():
         pass  # not available on every board/firmware build — non-fatal
 
     feed = wdt.feed if wdt is not None else (lambda: None)
+    consecutive_misses = 0
 
     while True:
         feed()
@@ -81,7 +82,7 @@ def main():
                 led.wifi_ready()
             except Exception as e:
                 print("wifi reconnect failed:", e)
-                time.sleep(config.POLL_INTERVAL_S)
+                time.sleep(config.POLL_ACTIVE_INTERVAL_S)
                 continue
 
         try:
@@ -91,12 +92,19 @@ def main():
             led.job_failed()
             found_job = False
 
-        if not found_job:
-            led.heartbeat()
-            time.sleep(config.POLL_INTERVAL_S)
-        # else: loop straight back around to check for another job
-        # immediately, rather than waiting out the poll interval while
-        # jobs are actively queued up
+        if found_job:
+            consecutive_misses = 0
+            # loop straight back around immediately rather than waiting
+            # out an interval — drains a burst of queued jobs at full
+            # speed instead of one every POLL_ACTIVE_INTERVAL_S.
+            continue
+
+        consecutive_misses += 1
+        led.heartbeat()
+        if consecutive_misses >= config.POLL_IDLE_AFTER_MISSES:
+            time.sleep(config.POLL_IDLE_INTERVAL_S)
+        else:
+            time.sleep(config.POLL_ACTIVE_INTERVAL_S)
 
 
 main()

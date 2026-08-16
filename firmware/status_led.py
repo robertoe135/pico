@@ -42,8 +42,9 @@ class StatusLed:
 
     def heartbeat(self):
         """Call once per idle poll tick — a brief blip every
-        POLL_INTERVAL_S seconds reads as a slow "I'm alive" pulse over
-        time without needing a background task."""
+        POLL_ACTIVE_INTERVAL_S or POLL_IDLE_INTERVAL_S seconds (whichever
+        the poll loop is currently backed off to) reads as a slow "I'm
+        alive" pulse over time without needing a background task."""
         self._set(1)
         time.sleep_ms(30)
         self._set(0)

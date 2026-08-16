@@ -99,6 +99,29 @@ rolled constant-time compare — XOR each byte, accumulate, compare the
 accumulator to 0 at the end — works too; don't short-circuit on the
 first mismatching byte.)
 
+### Cost of polling, and why it backs off
+
+Every poll to `GET /pico/pending-jobs` costs **2** Convex function calls,
+not 1 — the HTTP action itself, plus the internal `claimNextPendingJob`
+mutation it must call to touch the database (HTTP actions can't call
+`ctx.db` directly; that split is a Convex platform constraint, not a
+design choice here). At a flat 5s interval running 24/7, that's roughly:
+
+```
+(30 days × 86400s / 5s) × 2 calls ≈ 1,036,800 function calls/month
+```
+
+from idle polling alone, sharing the same project-wide quota as
+everything else tda-app does. That's why `firmware/config.py` polls
+adaptively rather than at a fixed rate: `POLL_ACTIVE_INTERVAL_S` (5s)
+right after activity, backing off to `POLL_IDLE_INTERVAL_S` (45s, ~9x
+fewer calls) after `POLL_IDLE_AFTER_MISSES` consecutive empty polls,
+snapping back to the fast interval the moment a job appears. An actual
+printed job only costs ~6 calls total (claim + content fetch + completion
+report) — trivial next to the idle-polling volume, so tuning the backoff
+is the lever that matters, not the job lifecycle itself. Nothing needed
+on the Convex side for this; it's entirely a firmware-side behavior.
+
 Exact request/response shapes are the source-of-truth contract in
 [PROTOCOL.md](./PROTOCOL.md) — implement to match that, not this
 summary:
@@ -106,14 +129,14 @@ summary:
 - `GET /pico/pending-jobs` → calls `claimNextPendingJob`; `204` if null,
   else `200` with the small job-metadata JSON PROTOCOL.md describes.
 
-  **Free win worth taking here**: the Pico already calls this route every
-  `POLL_INTERVAL_S` (5s default) regardless of whether there's a job —
-  that's a heartbeat you already have for free. Have this route also
-  touch a `lastSeenAt: Date.now()` on a small `devices` (or even a
-  single-row) table as a side effect of every poll, no matter whether it
-  found a job. tda-app's UI can then show "print bridge: online / last
-  seen Ns ago" without any new endpoint, firmware change, or polling from
-  the client — it's a live Convex query away.
+  **Free win worth taking here**: the Pico already calls this route on
+  every poll regardless of whether there's a job — that's a heartbeat you
+  already have for free. Have this route also touch a
+  `lastSeenAt: Date.now()` on a small `devices` (or even a single-row)
+  table as a side effect of every poll, no matter whether it found a job.
+  tda-app's UI can then show "print bridge: online / last seen Ns ago"
+  without any new endpoint, firmware change, or polling from the client —
+  it's a live Convex query away.
 
 - If you ever add a second printer or a second Pico, note that
   `claimNextPendingJob` as described doesn't filter by which printer(s)
@@ -195,10 +218,16 @@ parallel "Print to QL-810W" action that:
 3. Shows live status via a Convex query on the job's `state` —
    Convex's reactivity means the UI can show "queued" → "sent" (or
    "error") without polling, as soon as the Pico's completion report
-   lands. Given the Pico polls every `POLL_INTERVAL_S` (5s default) and
-   then reports back after printing, expect a few-second delay between
-   clicking print and the label actually coming out — worth a small
-   "printing…" state in the UI rather than expecting it instant.
+   lands. Given the Pico polls at `POLL_ACTIVE_INTERVAL_S` (5s default)
+   and then reports back after printing, expect a few-second delay
+   between clicking print and the label actually coming out — worth a
+   small "printing…" state in the UI rather than expecting it instant.
+   Worth noting: if the Pico had backed off to `POLL_IDLE_INTERVAL_S`
+   (45s default) before this job was queued, the *first* job after a
+   quiet stretch can take up to that long to be noticed, before it snaps
+   back to the fast interval for anything queued right behind it — the
+   UI's "queued" state covers this, but it's worth knowing the delay
+   isn't always just a few seconds.
 
 ## 6. Environment / config
 
