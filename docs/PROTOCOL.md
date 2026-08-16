@@ -82,9 +82,24 @@ or
 
 A shared secret (`X-Api-Key`), same trust model as before, just flipped
 in direction — the Pico now presents it to Convex rather than checking it
-on inbound requests. This is a meaningfully smaller attack surface than
-the earlier inbound-server design: there's no port, tunnel, or hostname
-for anything to probe on the Pico's side at all. The main residual risk
-is TLS server-certificate verification on the Pico's `ssl.wrap_socket()`
-call, which depends on the MicroPython build's mbedtls configuration —
-see the note in `docs/DEPLOYMENT.md` if you want to harden that further.
+on inbound requests.
+
+This is a meaningfully smaller attack surface than the earlier inbound-
+server design: there's no port, tunnel, or hostname for anything to probe
+on the Pico's side at all — nothing on the Pico is ever reachable from
+outside. The trade-off is that this key is now the **only** gate on
+Convex's three HTTP action routes, which are themselves public URLs the
+moment they're deployed. Two things that follow from that:
+
+- Generate the key with real entropy
+  (`python3 -c "import secrets; print(secrets.token_hex(24))"`), and
+  treat it as a real credential — set it directly in each place it's
+  needed (the Pico's local `config.py`, Convex's `PICO_API_KEY` env var)
+  rather than pasting it through a channel that keeps a permanent record.
+- Check it with a constant-time comparison on the Convex side, not `===`
+  — see TDA_APP_INTEGRATION.md §3 for the specific approach.
+
+The remaining residual risk is TLS server-certificate verification on the
+Pico's `ssl.wrap_socket()` call, which depends on the MicroPython build's
+mbedtls configuration — see the note in `docs/DEPLOYMENT.md` if you want
+to harden that further.

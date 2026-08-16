@@ -72,8 +72,34 @@ why this also matters for keeping the Pico's content fetch same-origin
 ## 3. HTTP actions (`convex/http.ts`)
 
 Three routes, each checking `X-Api-Key` against `process.env.PICO_API_KEY`
-before doing anything and returning `401` otherwise. Exact request/response
-shapes are the source-of-truth contract in
+before doing anything and returning `401` otherwise. This is now the
+**only** gate on these endpoints — unlike the earlier design, nothing on
+the Pico is ever reachable from outside, so these Convex routes are the
+entire public attack surface. Check the key with a constant-time
+comparison, not `===` — a plain string comparison on a secret is a
+narrow but real timing side-channel:
+
+```ts
+import { timingSafeEqual } from "node:crypto";
+
+function isAuthorized(req: Request): boolean {
+  const provided = req.headers.get("x-api-key");
+  const expected = process.env.PICO_API_KEY;
+  if (!provided || !expected) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  // lengths must match before timingSafeEqual will even compare
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+```
+
+(`node:crypto` needs the `"use node"` runtime on the action. If keeping
+these routes on Convex's default runtime is preferred instead, a hand-
+rolled constant-time compare — XOR each byte, accumulate, compare the
+accumulator to 0 at the end — works too; don't short-circuit on the
+first mismatching byte.)
+
+Exact request/response shapes are the source-of-truth contract in
 [PROTOCOL.md](./PROTOCOL.md) — implement to match that, not this
 summary:
 
